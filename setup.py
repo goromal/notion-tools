@@ -14,4 +14,5 @@ setup(
     author_email=about["__author_email__"],
     packages=find_packages(),
     include_package_data=True,
+    entry_points={"console_scripts": ["notion-tools=notion_tools.cli:main"]},
 )
