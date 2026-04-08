@@ -29,6 +29,14 @@ class NotRequiredIf(click.Option):
         return super(NotRequiredIf, self).handle_parse_result(ctx, opts, args)
 
 
+def _get_notion(ctx):
+    try:
+        return NotionTools.from_file(ctx.obj)
+    except Exception as e:
+        print(f"Program error: {e}")
+        exit(1)
+
+
 @click.group()
 @click.pass_context
 @click.option(
@@ -41,11 +49,7 @@ class NotRequiredIf(click.Option):
 )
 def cli(ctx: click.Context, token_file):
     """Interact with Notion pages."""
-    try:
-        ctx.obj = NotionTools.from_file(token_file)
-    except Exception as e:
-        print(f"Program error: {e}")
-        exit(1)
+    ctx.obj = token_file
 
 
 @cli.command()
@@ -76,8 +80,9 @@ def append(ctx: click.Context, page_id, content_file, content):
     else:
         print("ERROR: provide --file or --content")
         exit(1)
+    notion = _get_notion(ctx)
     try:
-        ctx.obj.append_blocks(page_id, text)
+        notion.append_blocks(page_id, text)
     except Exception as e:
         print(f"Program error: {e}")
         exit(1)
@@ -89,8 +94,9 @@ def append(ctx: click.Context, page_id, content_file, content):
 @click.argument("title", type=str)
 def set_title(ctx: click.Context, page_id, title):
     """Update the title of a Notion page."""
+    notion = _get_notion(ctx)
     try:
-        ctx.obj.update_page_title(page_id, title)
+        notion.update_page_title(page_id, title)
     except Exception as e:
         print(f"Program error: {e}")
         exit(1)
@@ -108,8 +114,9 @@ def set_title(ctx: click.Context, page_id, title):
 )
 def annotate(ctx: click.Context, keyword, page_id, dry_run):
     """Count bullets and action items on a page and retitle it with the counts."""
+    notion = _get_notion(ctx)
     try:
-        _, bullet_count, action_count = ctx.obj.do_counts(keyword, page_id, dry_run)
+        _, bullet_count, action_count = notion.do_counts(keyword, page_id, dry_run)
     except Exception as e:
         print(f"Program error: {e}")
         exit(1)
@@ -129,8 +136,9 @@ def annotate(ctx: click.Context, keyword, page_id, dry_run):
 )
 def get_blocks(ctx: click.Context, page_id, output):
     """Fetch the block content of a Notion page as JSON."""
+    notion = _get_notion(ctx)
     try:
-        blocks = ctx.obj.get_page_blocks(page_id)
+        blocks = notion.get_page_blocks(page_id)
     except Exception as e:
         print(f"Program error: {e}")
         exit(1)
