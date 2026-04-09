@@ -189,6 +189,21 @@ def list_subpages(ctx: click.Context, page_id):
 
 @cli.command()
 @click.pass_context
+@click.argument("parent_page_id", type=str)
+@click.argument("title", type=str)
+def create_subpage(ctx: click.Context, parent_page_id, title):
+    """Create a new child page under a parent page and print its page_id."""
+    notion = _get_notion(ctx)
+    try:
+        page_id = notion.create_subpage(parent_page_id, title)
+    except Exception as e:
+        print(f"Program error: {e}")
+        exit(1)
+    print(page_id)
+
+
+@cli.command()
+@click.pass_context
 @click.argument("block_id", type=str)
 @click.argument("dest_page_id", type=str)
 def move_block(ctx: click.Context, block_id, dest_page_id):

@@ -204,6 +204,18 @@ class NotionTools:
         if dr.status_code != 200:
             raise Exception(f"Error deleting block: {dr.status_code}, {dr.text}")
 
+    def create_subpage(self, parent_page_id, title):
+        """Create a new child page under parent_page_id and return its page_id."""
+        url = "https://api.notion.com/v1/pages"
+        data = {
+            "parent": {"page_id": parent_page_id},
+            "properties": {"title": [{"type": "text", "text": {"content": title}}]},
+        }
+        r = requests.post(url, json=data, headers=self.headers)
+        if r.status_code != 200:
+            raise Exception(f"Error creating subpage: {r.status_code}, {r.text}")
+        return r.json()["id"]
+
     def do_counts(self, keyword, page_id, dry_run=False):
         content = self.get_page_blocks(page_id)
         bullet_count, keyword_count = self.count_bullet_points_and_keywords(
