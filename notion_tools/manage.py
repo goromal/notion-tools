@@ -107,6 +107,103 @@ class NotionTools:
                 f"Error updating page title: {response.status_code}, {response.text}"
             )
 
+    def _rich_text_to_plain(self, rich_text):
+        parts = []
+        for rt in rich_text:
+            if rt["type"] == "text":
+                parts.append(rt["text"]["content"])
+            elif rt["type"] == "mention":
+                parts.append(rt.get("plain_text", ""))
+            else:
+                parts.append(rt.get("plain_text", ""))
+        return "".join(parts)
+
+    def _safe_rich_text(self, rich_text):
+        """Convert rich_text to a form the API accepts on write (strips unsupported mention types)."""
+        safe = []
+        for rt in rich_text:
+            if rt["type"] == "text":
+                safe.append(rt)
+            elif rt["type"] == "mention":
+                mtype = rt.get("mention", {}).get("type", "")
+                if mtype in ("user", "date", "page", "database", "template_mention"):
+                    safe.append(rt)
+                else:
+                    # e.g. link_mention — convert to plain text link
+                    href = rt.get("href")
+                    plain = rt.get("plain_text", href or "")
+                    safe.append({
+                        "type": "text",
+                        "text": {"content": plain, "link": {"url": href} if href else None},
+                        "annotations": rt.get("annotations", {}),
+                    })
+            else:
+                safe.append(rt)
+        return safe
+
+    def list_blocks(self, page_id, block_type=None):
+        """Return a flat list of (block_id, type, plain_text) for all blocks on a page."""
+        all_blocks = self.get_page_blocks(page_id)
+        results = []
+        for page in all_blocks:
+            for block in page["results"]:
+                btype = block["type"]
+                if block_type and btype != block_type:
+                    continue
+                bdata = block.get(btype, {})
+                rich_text = bdata.get("rich_text", [])
+                plain = self._rich_text_to_plain(rich_text)
+                results.append((block["id"], btype, plain))
+        return results
+
+    def list_subpages(self, page_id):
+        """Return a list of (page_id, title) for all sub-pages referenced from a page."""
+        all_blocks = self.get_page_blocks(page_id)
+        results = []
+        seen = set()
+        for page in all_blocks:
+            for block in page["results"]:
+                btype = block["type"]
+                # child_page blocks
+                if btype == "child_page":
+                    pid = block["id"]
+                    title = block.get("child_page", {}).get("title", "")
+                    if pid not in seen:
+                        results.append((pid, title))
+                        seen.add(pid)
+                # mention blocks in rich_text
+                bdata = block.get(btype, {})
+                for rt in bdata.get("rich_text", []):
+                    if rt.get("type") == "mention":
+                        mention = rt.get("mention", {})
+                        if mention.get("type") == "page":
+                            pid = mention["page"]["id"]
+                            title = rt.get("plain_text", "")
+                            if pid not in seen:
+                                results.append((pid, title))
+                                seen.add(pid)
+        return results
+
+    def move_block(self, block_id, dest_page_id):
+        """Move a block to a destination page (append then delete)."""
+        url = f"https://api.notion.com/v1/blocks/{block_id}"
+        r = requests.get(url, headers=self.headers)
+        if r.status_code != 200:
+            raise Exception(f"Error fetching block: {r.status_code}, {r.text}")
+        block = r.json()
+        btype = block["type"]
+        bdata = dict(block[btype])
+        if "rich_text" in bdata:
+            bdata["rich_text"] = self._safe_rich_text(bdata["rich_text"])
+        new_block = {"object": "block", "type": btype, btype: bdata}
+        append_url = f"https://api.notion.com/v1/blocks/{dest_page_id}/children"
+        ar = requests.patch(append_url, json={"children": [new_block]}, headers=self.headers)
+        if ar.status_code != 200:
+            raise Exception(f"Error appending block: {ar.status_code}, {ar.text}")
+        dr = requests.delete(url, headers=self.headers)
+        if dr.status_code != 200:
+            raise Exception(f"Error deleting block: {dr.status_code}, {dr.text}")
+
     def do_counts(self, keyword, page_id, dry_run=False):
         content = self.get_page_blocks(page_id)
         bullet_count, keyword_count = self.count_bullet_points_and_keywords(

@@ -150,6 +150,57 @@ def get_blocks(ctx: click.Context, page_id, output):
         print(out)
 
 
+@cli.command()
+@click.pass_context
+@click.argument("page_id", type=str)
+@click.option(
+    "--type",
+    "block_type",
+    type=str,
+    default="",
+    help="Filter by block type (e.g. bulleted_list_item).",
+)
+def list_blocks(ctx: click.Context, page_id, block_type):
+    """List blocks on a page as tab-separated block_id, type, text."""
+    notion = _get_notion(ctx)
+    try:
+        blocks = notion.list_blocks(page_id, block_type or None)
+    except Exception as e:
+        print(f"Program error: {e}")
+        exit(1)
+    for block_id, btype, text in blocks:
+        print(f"{block_id}\t{btype}\t{text}")
+
+
+@cli.command()
+@click.pass_context
+@click.argument("page_id", type=str)
+def list_subpages(ctx: click.Context, page_id):
+    """List sub-pages referenced from a page as tab-separated page_id, title."""
+    notion = _get_notion(ctx)
+    try:
+        subpages = notion.list_subpages(page_id)
+    except Exception as e:
+        print(f"Program error: {e}")
+        exit(1)
+    for pid, title in subpages:
+        print(f"{pid}\t{title}")
+
+
+@cli.command()
+@click.pass_context
+@click.argument("block_id", type=str)
+@click.argument("dest_page_id", type=str)
+def move_block(ctx: click.Context, block_id, dest_page_id):
+    """Move a block from its current page to a destination page."""
+    notion = _get_notion(ctx)
+    try:
+        notion.move_block(block_id, dest_page_id)
+    except Exception as e:
+        print(f"Program error: {e}")
+        exit(1)
+
+
 def main():
     cli()
 
