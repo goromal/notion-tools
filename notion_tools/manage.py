@@ -184,18 +184,30 @@ class NotionTools:
                                 seen.add(pid)
         return results
 
-    def move_block(self, block_id, dest_page_id):
-        """Move a block to a destination page (append then delete)."""
-        url = f"https://api.notion.com/v1/blocks/{block_id}"
-        r = requests.get(url, headers=self.headers)
-        if r.status_code != 200:
-            raise Exception(f"Error fetching block: {r.status_code}, {r.text}")
-        block = r.json()
+    def _build_block_with_children(self, block):
+        """Recursively build a block payload including any nested children."""
         btype = block["type"]
         bdata = dict(block[btype])
         if "rich_text" in bdata:
             bdata["rich_text"] = self._safe_rich_text(bdata["rich_text"])
-        new_block = {"object": "block", "type": btype, btype: bdata}
+        if block.get("has_children"):
+            children_resp = requests.get(
+                f"https://api.notion.com/v1/blocks/{block['id']}/children",
+                headers=self.headers,
+            )
+            if children_resp.status_code != 200:
+                raise Exception(f"Error fetching children: {children_resp.status_code}, {children_resp.text}")
+            children = children_resp.json().get("results", [])
+            bdata["children"] = [self._build_block_with_children(c) for c in children]
+        return {"object": "block", "type": btype, btype: bdata}
+
+    def move_block(self, block_id, dest_page_id):
+        """Move a block to a destination page (append then delete), preserving nested children."""
+        url = f"https://api.notion.com/v1/blocks/{block_id}"
+        r = requests.get(url, headers=self.headers)
+        if r.status_code != 200:
+            raise Exception(f"Error fetching block: {r.status_code}, {r.text}")
+        new_block = self._build_block_with_children(r.json())
         append_url = f"https://api.notion.com/v1/blocks/{dest_page_id}/children"
         ar = requests.patch(append_url, json={"children": [new_block]}, headers=self.headers)
         if ar.status_code != 200:
